@@ -17,7 +17,7 @@
 """Configuration dataclasses."""
 
 import dataclasses
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Union, Tuple, List
 import jax
 import jax.numpy as jnp
 
@@ -26,7 +26,7 @@ Context = Any  # TODO(lew): We could put Context in a separate file.
 
 FreshScaleFn = Callable[[jnp.ndarray], jnp.ndarray]
 ClipAndRoundFn = Callable[[jnp.ndarray, Context], jnp.ndarray]
-NoiseFn = Callable[[tuple[int, ...], jax.random.KeyArray], jnp.ndarray]
+NoiseFn = Callable[[Tuple[int, ...], jax.random.KeyArray], jnp.ndarray]
 
 
 @dataclasses.dataclass
@@ -50,7 +50,7 @@ class Tensor:
   """Configuration of quantization of one tensor or one side of tensor op."""
 
   numerics: Numerics
-  calib_shared_axes: Optional[list[int]]
+  calib_shared_axes: Optional[List[int]]
   bound: Optional[float]
   bound_stop_grad: bool
   # false = map max val on the end of the last bucket
@@ -218,8 +218,10 @@ class DotGeneral:
 
 def fully_quantized(
     *,
-    fwd_bits: int | None = 8,
-    bwd_bits: int | None = 8,
+    # fwd_bits: int | None = 8,
+    fwd_bits: Union[int, None] = 8,
+    # bwd_bits: int | None = 8,
+    bwd_bits: Union[int , None] = 8,
     use_fwd_quant: bool = True,
     use_stochastic_rounding: Optional[bool] = True,
     # Typically we have (but it's a caller's responsibility to check):

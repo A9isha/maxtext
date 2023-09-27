@@ -24,7 +24,7 @@
 
 import copy
 import functools
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple
 from aqt.jax.v2 import config
 import flax.struct
 import jax
@@ -39,7 +39,7 @@ class Context:
   train_step: Optional[int]
 
 
-def _context_split(context: Context) -> tuple[Context, Context]:
+def _context_split(context: Context) -> Tuple[Context, Context]:
   def mk_ctx(key):
     return Context(key=key, train_step=context.train_step)
   if context.key is not None:
@@ -230,7 +230,7 @@ class MultiTensor:
 class TensorRes:
   """All the things we pass from the forward pass to the backward pass."""
   mt: MultiTensor
-  quant_grad: Union[Callable[[jnp.ndarray], tuple[jnp.ndarray]], None]
+  quant_grad: Union[Callable[[jnp.ndarray], Tuple[jnp.ndarray]], None]
 
 
 @flax.struct.dataclass
