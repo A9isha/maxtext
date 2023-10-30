@@ -157,11 +157,13 @@ def dot_product_attention(query: Array,
   if float32_logits:
     query = query.astype(jnp.float32)
     key = key.astype(jnp.float32)
-  # Layer norms here prevent (near) one-hot softmaxes, which can lead to
-  # unstable training loss and nans, see the "QK Normalization" subsection in
-  # https://arxiv.org/pdf/2302.05442.pdf.
-  query = LayerNorm(dtype=dtype, name='query_layer_norm', kernel_axes = ('heads',))(query)
-  key = LayerNorm(dtype=dtype, name='key_layer_norm', kernel_axes = ('heads',))(key)
+
+  #Llama architecture doesn't have this softmax
+  # # Layer norms here prevent (near) one-hot softmaxes, which can lead to
+  # # unstable training loss and nans, see the "QK Normalization" subsection in
+  # # https://arxiv.org/pdf/2302.05442.pdf.
+  # query = LayerNorm(dtype=dtype, name='query_layer_norm', kernel_axes = ('heads',))(query)
+  # key = LayerNorm(dtype=dtype, name='key_layer_norm', kernel_axes = ('heads',))(key)
 
   # QK Product, a.k.a `attn_weights`: [batch, num_heads, q_length, kv_length]
   attn_weights = compute_qk_attn_weights(query, key, cfg, aqt_rng)
@@ -171,6 +173,8 @@ def dot_product_attention(query: Array,
     attn_weights = attn_weights + bias.astype(attn_weights.dtype)
 
   # Normalize the attention weights across `kv_length` dimension.
+  #Llama upcasts attention to fp32
+  attn_weights = attn_weights.astype(jnp.float32)
   attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
   # Apply attention dropout.
@@ -1032,6 +1036,9 @@ class DecoderLayer(nn.Module):
     inputs = nn.with_logical_constraint(inputs, ('activation_batch', 'activation_length', 'activation_embed'))
 
     # inputs: embedded inputs to the decoder with shape [batch, length, emb_dim]
+
+    residual = inputs
+
     lnx = LayerNorm(
         dtype=cfg.dtype, name='pre_self_attention_layer_norm', kernel_axes=('embed',))(
             inputs)
@@ -1054,6 +1061,14 @@ class DecoderLayer(nn.Module):
             decode=decode)
     attention_lnx = nn.with_logical_constraint(attention_lnx, ('activation_batch', 'activation_length', 'activation_embed'))
 
+    residual += attention_lnx
+
+    attention_lnx = residual
+
+    attention_lnx = LayerNorm(
+        dtype=cfg.dtype, name='post_self_attention_layer_norm', kernel_axes=('embed',))(
+            attention_lnx)
+
     # MLP block.
     mlp_lnx = MlpBlock(
         intermediate_dim=cfg.mlp_dim,
@@ -1062,16 +1077,17 @@ class DecoderLayer(nn.Module):
         dtype=cfg.dtype,
         name='mlp',
         config=cfg,
-    )(lnx, deterministic=deterministic)
+    )(attention_lnx, deterministic=deterministic)
     mlp_lnx = nn.with_logical_constraint(mlp_lnx, ('activation_batch', 'activation_length', 'activation_embed'))
 
-    next_layer_addition = mlp_lnx + attention_lnx
+    layer_output = mlp_lnx + residual
 
-    next_layer_addition_dropped_out = nn.Dropout(
-        rate=cfg.dropout_rate, broadcast_dims=(-2,))(
-            next_layer_addition, deterministic=deterministic)
+    # #Llama doesn't use dropout
+    # next_layer_addition_dropped_out = nn.Dropout(
+    #     rate=cfg.dropout_rate, broadcast_dims=(-2,))(
+    #         next_layer_addition, deterministic=deterministic)
 
-    layer_output = next_layer_addition_dropped_out + inputs
+    # layer_output = next_layer_addition_dropped_out + inputs
     layer_output = nn.with_logical_constraint(layer_output, ('activation_batch', 'activation_length', 'activation_embed'))
 
     if cfg.record_internal_nn_metrics:
