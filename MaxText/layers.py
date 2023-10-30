@@ -1061,9 +1061,8 @@ class DecoderLayer(nn.Module):
             decode=decode)
     attention_lnx = nn.with_logical_constraint(attention_lnx, ('activation_batch', 'activation_length', 'activation_embed'))
 
-    residual += attention_lnx
-
-    attention_lnx = residual
+    attention_lnx += residual
+    residual = attention_lnx
 
     attention_lnx = LayerNorm(
         dtype=cfg.dtype, name='post_self_attention_layer_norm', kernel_axes=('embed',))(
